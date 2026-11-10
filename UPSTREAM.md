@@ -48,8 +48,19 @@ changes below. The web UI source is unchanged.
 5. **Added** — `Dockerfile.safe`, `docker-compose.safe.yml`, `.env.safe.example`,
    `SECURITY.md`, `UPSTREAM.md`, `Makefile`, `.dockerignore`, `.gitignore`, and
    this repository's audit reports under `audit/`.
+6. **Runtime capability parity** — `Dockerfile.safe` installs the same browser
+   stack as the upstream Dockerfile: Node 22, `@playwright/mcp`,
+   `@playwright/cli`, Playwright, and Chromium. It runs as root like upstream so
+   nmap raw scans and runtime tool installation work. The deployment differences
+   are loopback-only console binding, an unpublished proxy, and
+   `no-new-privileges`.
+7. **`db/db.go`** — the seeded browser MCP launches the pinned `playwright-mcp`
+   binary with `["--headless","--no-sandbox"]` instead of
+   `npx @playwright/mcp`. This avoids a registry lookup, an accidental
+   `@latest` download, and Chromium startup failures as root. The MCP is still
+   seeded disabled and remains an admin-enabled feature.
 
-No application logic was changed.
+No other application logic was changed.
 
 ## The incident this fork responds to
 

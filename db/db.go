@@ -256,13 +256,24 @@ ON CONFLICT (agent_id, var_name) DO UPDATE
 	// 需要时自行启用), no proxy by default. The traffic-capture toggle injects/strips
 	// the recording proxy + CA at runtime (server.Manager.syncBrowserMCPProxy).
 	// Insert only if absent so we never clobber user edits (args/env/enabled/
-	// visibility) on restart.
+	// visibility) on restart. The packaged image installs the pinned
+	// playwright-mcp binary, so use it directly instead of npx (no registry
+	// lookup, no accidental latest-version download).
 	if _, err := d.Exec(`
 INSERT INTO mcp_servers(name, transport, command, args, env, enabled)
-VALUES ('browser', 'stdio', 'npx', $1, '{}', false)
+VALUES ('browser', 'stdio', 'playwright-mcp', $1, '{}', false)
 ON CONFLICT (name) DO NOTHING`,
-		`["@playwright/mcp","--headless"]`); err != nil {
+		`["--headless","--no-sandbox"]`); err != nil {
 		return fmt.Errorf("seed browser mcp: %w", err)
+	}
+	// Migrate the upstream default row from npx to the pinned binary. Only the
+	// exact default is touched; user-edited commands and args are left alone.
+	if _, err := d.Exec(`
+UPDATE mcp_servers
+SET command='playwright-mcp', args='["--headless","--no-sandbox"]'::jsonb
+WHERE name='browser' AND command='npx'
+  AND args='["@playwright/mcp","--headless"]'::jsonb`); err != nil {
+		return fmt.Errorf("migrate browser mcp: %w", err)
 	}
 	// NOTE: the placeholder ScopeSentry data-source MCP (empty URL + empty X-API-Key,
 	// disabled) is seeded directly in schema.sql §F so a raw `psql < schema.sql` init

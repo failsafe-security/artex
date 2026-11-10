@@ -5,8 +5,10 @@ an open-source multi-agent security testing harness.
 
 This repository exists because the prebuilt `tomicdd/artex` Docker image was
 found to contain an unauthenticated command-execution backdoor in November 2026.
-This build is compiled from the audited `v0.3.15` source tag, runs as a non-root
-user, binds its console to localhost, and does not include browser automation.
+This build is compiled from the audited `v0.3.15` source tag and keeps upstream's
+full runtime capabilities, including Node 22, Playwright, Chromium, and nmap.
+The compose file binds the console to localhost and does not publish the
+recording proxy.
 
 > **Authorized testing only.** ARTEX runs an autonomous agent that can execute
 > shell commands and send network traffic. Use it only against systems you own
@@ -14,7 +16,8 @@ user, binds its console to localhost, and does not include browser automation.
 
 ## Quick start
 
-Requirements: Docker Engine with Compose v2, and about 2 GB of free disk.
+Requirements: Docker Engine with Compose v2, and about 5 GB of free disk
+(the browser stack and Chromium account for most of the image size).
 If your Docker installation only provides the standalone `docker-compose`
 command, substitute it for `docker compose` below; `make` detects either.
 
@@ -52,17 +55,21 @@ docker compose --env-file .env.safe -f docker-compose.safe.yml down -v
 | Area | Upstream default | This build |
 |---|---|---|
 | Image | prebuilt `tomicdd/artex` (backdoored) | compiled from this source tree |
-| Runtime user | root | `artex` (UID 10001) |
+| Runtime user | root | root (upstream parity) |
 | Console binding | `0.0.0.0:8787` | `127.0.0.1:8787` |
 | Recording proxy | published on `8788` | not published |
-| Browser automation | Playwright + Chromium | omitted |
-| Capabilities | default Docker set | `cap_drop: ALL`, `no-new-privileges` |
+| Browser automation | Node 22 + Playwright + Chromium | same, pinned versions |
+| Browser MCP launcher | `npx @playwright/mcp` | pinned `playwright-mcp` |
+| Capabilities | default Docker set | default Docker set + `no-new-privileges` |
 | Self-update | points at upstream | points at this fork; one-click update disabled |
 | Base images | floating tags | pinned by digest |
 
-The API and UI are unchanged. Browser-driven features that require Playwright
-will not work in this image. `nmap` runs without `CAP_NET_RAW`, so only TCP
-connect scans work; add `NET_RAW` only if your authorization covers raw scans.
+The API, UI, skills, browser MCP, and browser-driven recon are unchanged.
+Node, Playwright, the Playwright MCP/CLI, and Chromium are preinstalled;
+`nmap` raw scans and runtime `apt`/`npm -g` installs work because the container
+runs as root, as upstream does. The deployment hardening that remains is the
+loopback-only console, an unpublished proxy, `no-new-privileges`, a persisted
+JWT key, and digest-pinned base images.
 
 ## Build without Docker
 
@@ -83,7 +90,9 @@ CGO_ENABLED=0 go build \
 ```
 
 Then run `./artex -addr 127.0.0.1:8787 -proxy 127.0.0.1:8788` with
-`ARTEX_PG_DSN` set to a PostgreSQL database you control.
+`ARTEX_PG_DSN` set to a PostgreSQL database you control. This bare-binary path
+does not install Node, Playwright, Chromium, or the recon CLI tools; use the
+Docker image for full upstream capability.
 
 ## Verify the build
 

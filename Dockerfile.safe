@@ -1,16 +1,23 @@
 # syntax=docker/dockerfile:1.7
 #
-# FailSafe ARTEX safe build.
+# FailSafe ARTEX full build.
 #
-# Builds ARTEX v0.3.15 from source. It does not pull a prebuilt ARTEX image.
-# The web UI is compiled and embedded; browser automation (Playwright/Chromium)
-# is intentionally omitted to reduce the runtime attack surface.
+# Builds ARTEX v0.3.15 from source with the upstream runtime capabilities:
+# Node 22, Playwright MCP/CLI, Chromium, and the usual recon tools. It does not
+# pull a prebuilt ARTEX image. The runtime runs as root, as upstream does, so
+# nmap raw scans and runtime tool installation work; the compose file still
+# binds the console to localhost and adds no-new-privileges.
 #
-# Base images are pinned by digest. Update them deliberately, then re-audit.
+# Base images and Playwright packages are pinned. Update them deliberately,
+# then re-audit.
 
 ARG GO_IMAGE=golang:1.26.10@sha256:cfa27959837144bf4649802ba38e59daffd0dd2a7994aa83daaf113285b0f551
 ARG NODE_IMAGE=node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
 ARG PYTHON_IMAGE=python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337
+
+ARG PLAYWRIGHT_MCP_VERSION=0.0.85
+ARG PLAYWRIGHT_CLI_VERSION=0.1.24
+ARG PLAYWRIGHT_VERSION=1.65.0
 
 FROM ${NODE_IMAGE} AS web-builder
 WORKDIR /src/web
@@ -40,20 +47,54 @@ FROM ${PYTHON_IMAGE} AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates ripgrep curl wget vim git jq unzip tzdata binutils \
       dnsutils iputils-ping netcat-openbsd inetutils-telnet whois nmap \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd -u 10001 -m -s /usr/sbin/nologin artex
+    && rm -rf /var/lib/apt/lists/*
+
+# Bring Node 22 in from the pinned builder stage. COPY dereferences the npm/npx
+# symlinks, so recreate them against the copied node_modules tree.
+COPY --from=web-builder /usr/local/bin/node /usr/local/bin/node
+COPY --from=web-builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && node --version && npm --version
+
+# Install the same browser stack as upstream, pinned. Install Chromium for the
+# top-level Playwright and for the nested copies used by MCP and CLI.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npm install -g \
+      @playwright/mcp@${PLAYWRIGHT_MCP_VERSION} \
+      @playwright/cli@${PLAYWRIGHT_CLI_VERSION} \
+      playwright@${PLAYWRIGHT_VERSION} \
+    && playwright --version \
+    && playwright install --with-deps chromium \
+    && for pw in /usr/local/lib/node_modules/@playwright/*/node_modules/playwright/cli.js; do \
+         [ -f "$pw" ] && node "$pw" install chromium; \
+       done \
+    && npm cache clean --force \
+    && rm -rf /root/.npm
+
+# The api-recon runtime harvester defaults to /usr/bin/chromium. Point it at the
+# Chromium build Playwright installed.
+RUN set -eux; \
+    CHROME_BIN="$(find /ms-playwright -path '*/chrome-linux*/chrome' -type f | head -n1)"; \
+    test -n "$CHROME_BIN"; \
+    ln -sf "$CHROME_BIN" /usr/bin/chromium; \
+    ln -sf "$CHROME_BIN" /usr/bin/chromium-browser; \
+    chmod -R a+rX /ms-playwright; \
+    "$CHROME_BIN" --version
 
 WORKDIR /app
 COPY --from=go-builder /out/artex /app/artex
 COPY start.sh /app/start.sh
 COPY skills/ /app/skills/
 RUN chmod +x /app/artex /app/start.sh \
-    && mkdir -p /app/data /app/keys \
+    && mkdir -p /app/data /app/keys /app/.playwright \
     && ln -sfn /app/keys/jwt.key /app/jwt.key \
-    && chown -R artex:artex /app
+    && printf '%s\n' '{"browser":{"browserName":"chromium","launchOptions":{"args":["--no-sandbox"]}}}' > /app/.playwright/cli.config.json
 
-USER artex
-ENV HOME=/home/artex \
+# Upstream runs as root; keep that for tool parity. compose adds
+# no-new-privileges and binds the console to loopback.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    NODE_PATH=/usr/local/lib/node_modules \
     TMPDIR=/tmp \
     NORMA_RIPGREP_NO_INSTALL=1 \
     NEXT_TELEMETRY_DISABLED=1

@@ -36,8 +36,10 @@ scope, rules of engagement, and applicable law.
 - **Treat the console as admin-equivalent.** Custom Python tools and MCP stdio
   servers execute arbitrary code by design. A stolen admin session is code
   execution.
-- **Run unprivileged.** The image runs as UID 10001 with `cap_drop: ALL` and
-  `no-new-privileges`. Do not add `privileged: true` or mount the Docker socket.
+- **Expect root inside the container.** The image runs as root, matching
+  upstream, so nmap raw scans and runtime tool installation work. Keep
+  `no-new-privileges`, do not add `privileged: true`, and never mount the Docker
+  socket. Treat the container as a high-value host if it is compromised.
 - **Review skills.** `skills/` is copied into the image. A skill can instruct
   the agent to run commands. Review any skill you add or mount.
 - **Keep secrets out of images.** The image contains no API keys, database
@@ -53,6 +55,9 @@ scope, rules of engagement, and applicable law.
   image is pulled.
 - Go module checksums are verified with `go mod verify`; there are no `replace`
   directives in `go.mod`.
+- Node 22 is copied from the pinned `node:22-slim` stage. `@playwright/mcp`,
+  `@playwright/cli`, and `playwright` are installed at pinned versions, and
+  Chromium is installed with `playwright install --with-deps chromium`.
 - Release artifacts should be published with SHA-256 checksums and, once
   available, a signed image and SBOM. Signing is not yet automated.
 
@@ -62,12 +67,15 @@ scope, rules of engagement, and applicable law.
    original project because the original upstream is unavailable. The build is
    reproducible from this tree, but that proves the binary matches the tree,
    not that the tree matches the original author's last release.
-2. **Dependency trust.** Third-party Go modules and apt packages are verified
-   by their ecosystems but not audited line by line.
-3. **Browser automation omitted.** Some ARTEX features that need Playwright or
-   Chromium are unavailable. This is a deliberate reduction in attack surface.
+2. **Dependency trust.** Third-party Go modules, apt packages, npm packages,
+   and Chromium are verified by their ecosystems but not audited line by line.
+   The browser stack is the largest third-party surface in the image.
+3. **Root runtime and browser surface.** The container runs as root to preserve
+   upstream capability, and Chromium parses untrusted web content. Do not run it
+   on a host with sensitive data, and keep the console loopback-only.
 4. **No signature verification on self-update.** One-click update is disabled
    by the embedded version suffix. Do not re-enable it against an untrusted
    feed.
-5. **Raw-socket scans.** Without `CAP_NET_RAW`, `nmap` can do connect scans
-   only. Add the capability only when authorized.
+5. **Browser sandboxing.** Chromium runs as root with `--no-sandbox` for
+   reliable startup, so the browser's own sandbox is not a security boundary
+   here. Rely on the container and host isolation instead.
