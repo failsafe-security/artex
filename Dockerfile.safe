@@ -1,0 +1,67 @@
+# syntax=docker/dockerfile:1.7
+#
+# FailSafe ARTEX safe build.
+#
+# Builds ARTEX v0.3.15 from source. It does not pull a prebuilt ARTEX image.
+# The web UI is compiled and embedded; browser automation (Playwright/Chromium)
+# is intentionally omitted to reduce the runtime attack surface.
+#
+# Base images are pinned by digest. Update them deliberately, then re-audit.
+
+ARG GO_IMAGE=golang:1.26.10@sha256:cfa27959837144bf4649802ba38e59daffd0dd2a7994aa83daaf113285b0f551
+ARG NODE_IMAGE=node:22-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
+ARG PYTHON_IMAGE=python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337
+
+FROM ${NODE_IMAGE} AS web-builder
+WORKDIR /src/web
+COPY web/package.json web/package-lock.json ./
+# --ignore-scripts avoids lifecycle hooks such as husky's prepare script.
+RUN npm ci --ignore-scripts
+COPY web/ ./
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build:static
+
+FROM ${GO_IMAGE} AS go-builder
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
+COPY . .
+COPY --from=web-builder /src/web/out /src/server/webui/dist
+# Keep symbols for auditability; disable build IDs for reproducibility.
+# The version suffix disables the upstream one-click updater.
+RUN CGO_ENABLED=0 go build \
+      -trimpath \
+      -buildvcs=false \
+      -tags embedui \
+      -ldflags="-buildid= -X main.version=v0.3.15-failsafe.1" \
+      -o /out/artex ./cmd/artex
+
+FROM ${PYTHON_IMAGE} AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates ripgrep curl wget vim git jq unzip tzdata binutils \
+      dnsutils iputils-ping netcat-openbsd inetutils-telnet whois nmap \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -u 10001 -m -s /usr/sbin/nologin artex
+
+WORKDIR /app
+COPY --from=go-builder /out/artex /app/artex
+COPY start.sh /app/start.sh
+COPY skills/ /app/skills/
+RUN chmod +x /app/artex /app/start.sh \
+    && mkdir -p /app/data /app/keys \
+    && ln -sfn /app/keys/jwt.key /app/jwt.key \
+    && chown -R artex:artex /app
+
+USER artex
+ENV HOME=/home/artex \
+    TMPDIR=/tmp \
+    NORMA_RIPGREP_NO_INSTALL=1 \
+    NEXT_TELEMETRY_DISABLED=1
+
+VOLUME ["/app/data"]
+EXPOSE 8787 8788
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:8787/api/health || exit 1
+
+ENTRYPOINT ["/app/start.sh"]
+CMD ["-addr", ":8787", "-proxy", ":8788"]

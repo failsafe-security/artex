@@ -1,0 +1,14 @@
+.env
+.env.safe
+.env.safe.local
+data/
+quarantine/
+dist/
+*.log
+*.test
+artex
+web/node_modules/
+web/out/
+web/.next/
+server/webui/dist/
+.DS_Store

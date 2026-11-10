@@ -1,0 +1,50 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.10"
+          cache: true
+      - run: go vet ./...
+      - run: go test ./selfupdate
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build safe image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.safe
+          platforms: linux/amd64
+          load: true
+          tags: failsafe-security/artex:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify implant indicators and runtime user
+        run: make verify IMAGE=failsafe-security/artex:ci
+
+      - name: Record image digest
+        run: docker image inspect failsafe-security/artex:ci --format '{{.Id}}' | tee image-id.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-id
+          path: image-id.txt
