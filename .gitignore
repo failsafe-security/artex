@@ -6,7 +6,7 @@ quarantine/
 dist/
 *.log
 *.test
-artex
+/artex
 web/node_modules/
 web/out/
 web/.next/
