@@ -1,5 +1,13 @@
 # FailSafe ARTEX
 
+```text
+    _    ____ _____ _______  __
+   / \  |  _ \_   _| ____\ \/ /
+  / _ \ | |_) || | |  _|  \  /
+ / ___ \|  _ < | | | |___ /  \
+/_/   \_\_| \_\|_| |_____/_/\_\
+```
+
 A source-built, locally bound distribution of [ARTEX](https://github.com/RuoJi6/ARTEX),
 an open-source multi-agent security testing harness.
 
@@ -13,6 +21,18 @@ recording proxy.
 > **Authorized testing only.** ARTEX runs an autonomous agent that can execute
 > shell commands and send network traffic. Use it only against systems you own
 > or have explicit written permission to test.
+
+## Managed ARTEX runs
+
+FailSafe can host and run ARTEX safely for you using **GlassBreak**, our
+cyber-grade model. We handle the isolated runtime, scoping, evidence handling,
+and the operational controls that are easy to get wrong in a self-hosted
+deployment.
+
+If you want a managed run, contact us:
+
+- **Email:** [hello@getfailsafe.com](mailto:hello@getfailsafe.com)
+- **Contact form:** <https://getfailsafe.com/contact-us>
 
 ## Quick start
 
