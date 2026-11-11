@@ -1,12 +1,8 @@
 # FailSafe ARTEX
 
-```text
-    _    ____ _____ _______  __
-   / \  |  _ \_   _| ____\ \/ /
-  / _ \ | |_) || | |  _|  \  /
- / ___ \|  _ < | | | |___ /  \
-/_/   \_\_| \_\|_| |_____/_/\_\
-```
+<p align="center">
+  <img src="assets/artex-failsafe-header.png" alt="ARTEX — a source-built FailSafe distribution" width="100%">
+</p>
 
 A source-built, locally bound distribution of [ARTEX](https://github.com/RuoJi6/ARTEX),
 an open-source multi-agent security testing harness.
