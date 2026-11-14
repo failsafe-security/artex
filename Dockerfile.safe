@@ -44,6 +44,10 @@ RUN CGO_ENABLED=0 go build \
       -o /out/artex ./cmd/artex
 
 FROM ${PYTHON_IMAGE} AS runtime
+ARG PLAYWRIGHT_MCP_VERSION
+ARG PLAYWRIGHT_CLI_VERSION
+ARG PLAYWRIGHT_VERSION
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates ripgrep curl wget vim git jq unzip tzdata binutils \
       dnsutils iputils-ping netcat-openbsd inetutils-telnet whois nmap \
