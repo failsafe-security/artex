@@ -296,7 +296,9 @@ coverage 每轮导出：`__API_RECON_LOG__`、`__API_RECON_DETAIL__`、`__API_RE
 验证：`window.__API_RECON_PRELOAD__` 存在；业务 path 不回 `/login`。
 
 ```bash
-cd recon && npm install
+# puppeteer-core is preinstalled in the image (NODE_PATH). Outside the image, copy
+# package.json + package-lock.json + .npmrc from scripts/ and install from the lock:
+cd recon && { node -e "require('puppeteer-core')" 2>/dev/null || npm ci --ignore-scripts; }
 node runtime_harvest.js config.json
 ```
 
