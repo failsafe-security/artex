@@ -2,6 +2,7 @@ package selfupdate
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -12,47 +13,42 @@ type releaseTransport func(*http.Request) (*http.Response, error)
 
 func (f releaseTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-func TestFetchLatestUsesForkRelease(t *testing.T) {
-	client := &http.Client{Transport: releaseTransport(func(r *http.Request) (*http.Response, error) {
-		if got := r.URL.String(); got != "https://api.github.com/repos/failsafe-security/artex/releases/latest" {
-			t.Fatalf("unexpected update source: %s", got)
-		}
-		if r.Method != http.MethodGet || r.Header.Get("Accept") != "application/vnd.github+json" {
-			t.Fatalf("invalid GitHub request: %s %v", r.Method, r.Header)
-		}
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{
-			"tag_name":"v0.3.16",
-			"assets":[
-				{"name":"artex-0.3.16-linux-arm64.zip","browser_download_url":"https://github.com/failsafe-security/artex/releases/download/v0.3.16/artex-0.3.16-linux-arm64.zip"},
-				{"name":"SHA256SUMS","browser_download_url":"https://github.com/failsafe-security/artex/releases/download/v0.3.16/SHA256SUMS"}
-			]
-		}`))}, nil
-	})}
-	rel, err := FetchLatest(context.Background(), client)
-	if err != nil {
-		t.Fatal(err)
+// Online self-update is compiled out in this fork (Enabled == false). The two
+// online entry points must refuse before touching the network.
+
+func TestFetchLatestDisabledMakesNoRequest(t *testing.T) {
+	if Enabled {
+		t.Skip("online self-update is enabled in this build; disabled-path test does not apply")
 	}
-	for _, name := range []string{AssetName(rel.TagName, "linux", "arm64"), sumsAsset} {
-		asset, ok := rel.FindAsset(name)
-		if !ok {
-			t.Fatalf("missing release asset %s", name)
-		}
-		body, err := get(context.Background(), &http.Client{Transport: releaseTransport(func(r *http.Request) (*http.Response, error) {
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("asset"))}, nil
-		})}, asset.URL)
-		if err != nil {
-			t.Fatalf("fork asset URL rejected: %v", err)
-		}
-		body.Close()
+	called := false
+	client := &http.Client{Transport: releaseTransport(func(*http.Request) (*http.Response, error) {
+		called = true
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("{}"))}, nil
+	})}
+	_, err := FetchLatest(context.Background(), client)
+	if !errors.Is(err, ErrDisabled) {
+		t.Fatalf("want ErrDisabled, got %v", err)
+	}
+	if called {
+		t.Fatal("FetchLatest must not make a network request when self-update is disabled")
 	}
 }
 
-func TestFetchLatestMissingRelease(t *testing.T) {
+func TestStageDisabledMakesNoRequest(t *testing.T) {
+	if Enabled {
+		t.Skip("online self-update is enabled in this build; disabled-path test does not apply")
+	}
+	called := false
 	client := &http.Client{Transport: releaseTransport(func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("{}"))}, nil
+		called = true
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(""))}, nil
 	})}
-	_, err := FetchLatest(context.Background(), client)
-	if err == nil || !strings.Contains(err.Error(), "failsafe-security/artex") || !strings.Contains(err.Error(), "不可访问或尚未发布") {
-		t.Fatalf("unexpected missing-release error: %v", err)
+	rel := &Release{TagName: "v9.9.9", Assets: []Asset{{Name: "SHA256SUMS", URL: "https://example.invalid/SHA256SUMS"}}}
+	err := Stage(context.Background(), client, rel, "v0.0.1", nil)
+	if !errors.Is(err, ErrDisabled) {
+		t.Fatalf("want ErrDisabled, got %v", err)
+	}
+	if called {
+		t.Fatal("Stage must not make a network request when self-update is disabled")
 	}
 }

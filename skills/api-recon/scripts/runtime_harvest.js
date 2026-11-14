@@ -2,8 +2,9 @@
 /*
  * runtime_harvest.js <config.json>
  *
- * 参考模板 — 非通用成品。执行前须按目标站点调整 config.json 及脚本内逻辑：
- *   cookies/localStorage、neutralize 字段、stubs 结构、loginUrlPattern、apiPattern
+ * Reference template — not a universal build. Adjust config.json and the in-script
+ * logic to the target site before running:
+ *   cookies/localStorage, neutralize fields, stubs structure, loginUrlPattern, apiPattern
  *
  * Drives a headless browser through an authorized SPA to capture the live API
  * surface (method + url + body) by defeating three client-side gates:
@@ -37,8 +38,13 @@ const fs = require('fs');
 const path = require('path');
 
 let puppeteer;
-try { puppeteer = require('puppeteer-core'); }
-catch (e) { console.error("[!] run `npm install` in the scripts/ dir first (needs puppeteer-core)"); process.exit(1); }
+// Resolve puppeteer-core from a fixed, trusted location first: a node_modules/
+// inside a scanned target workspace must not be able to shadow it. In the image
+// ARTEX_PUPPETEER_PATH points at /opt/api-recon-runtime; outside it, set that
+// env var or fall back to normal resolution (local install / NODE_PATH).
+const PUPPETEER_MODULE = process.env.ARTEX_PUPPETEER_PATH || 'puppeteer-core';
+try { puppeteer = require(PUPPETEER_MODULE); }
+catch (e) { console.error("[!] puppeteer-core not found. In the image it is preinstalled (ARTEX_PUPPETEER_PATH); elsewhere run `npm ci --ignore-scripts` in the scripts/ dir or set ARTEX_PUPPETEER_PATH."); process.exit(1); }
 
 function loadCfg(p) {
   const c = JSON.parse(fs.readFileSync(p, 'utf8'));
@@ -97,7 +103,7 @@ function neutralize(txt, n) {
   const launchArgs = ['--no-sandbox', '--disable-dev-shm-usage', '--ignore-certificate-errors'];
   if (cfg.proxy) launchArgs.push(`--proxy-server=${cfg.proxy}`);
   const browser = await puppeteer.launch({
-    executablePath: cfg.chromium, headless: cfg.headless ? 'new' : false,
+    executablePath: cfg.chromium, headless: cfg.headless,
     args: launchArgs
   });
   const page = await browser.newPage();

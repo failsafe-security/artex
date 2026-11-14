@@ -225,6 +225,18 @@ func (s *Server) updateCheck(w http.ResponseWriter, r *http.Request) {
 		"rolled_back": boot.RolledBack,
 	}
 
+	// Online self-update is compiled out in this fork (selfupdate.Enabled).
+	// Report "no update, disabled" and return before building a client or
+	// querying any release feed, so this endpoint makes no outbound request.
+	if !selfupdate.Enabled {
+		out["disabled"] = true
+		out["has_update"] = false
+		out["comparable"] = false
+		out["reason"] = "在线更新已在本构建中禁用（不检查或下载远程版本）"
+		writeJSON(w, 200, out)
+		return
+	}
+
 	// 顶栏提示走缓存（默认）；用户点"检查更新"时带 force=1 强制回源。
 	force := r.URL.Query().Get("force") != ""
 	client := selfupdate.NewClient(s.m.GlobalProxy())
@@ -268,6 +280,12 @@ func (s *Server) updateCheck(w http.ResponseWriter, r *http.Request) {
 // 立刻返回 202，实际工作在后台 goroutine 上跑：整包下载可能要几分钟，
 // 挂在请求上会被反代超时掐断。进度走 /api/update/stream。
 func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
+	// Online self-update is compiled out in this fork (selfupdate.Enabled):
+	// refuse before any download so no remote binary is ever staged.
+	if !selfupdate.Enabled {
+		writeErr(w, 403, "在线更新已在本构建中禁用")
+		return
+	}
 	current := BuildVersion
 
 	// 走缓存：确保装上的就是用户在界面上看到并确认的那个版本。
@@ -313,6 +331,13 @@ func (s *Server) updateApply(w http.ResponseWriter, r *http.Request) {
 
 // updateRollback 主动退回上一版本（换装前备份的 artex.old）。
 func (s *Server) updateRollback(w http.ResponseWriter, r *http.Request) {
+	// Part of the self-update machinery, which is compiled out in this fork
+	// (selfupdate.Enabled). There is never a staged backup to roll back to,
+	// so refuse rather than appear to offer a working control.
+	if !selfupdate.Enabled {
+		writeErr(w, 403, "在线更新已在本构建中禁用")
+		return
+	}
 	if _, running := updHub.snapshot(); running {
 		writeErr(w, 409, "更新正在进行中，无法回滚")
 		return
