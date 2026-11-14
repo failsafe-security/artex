@@ -25,6 +25,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Test verification failure handling
+        run: sh tests/verify.sh
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Build safe image
