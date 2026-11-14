@@ -41,6 +41,11 @@ jobs:
       - name: Verify implant indicators and runtime user
         run: make verify IMAGE=failsafe-security/artex:ci
 
+      - name: api-recon Puppeteer runtime smoke test
+        run: |
+          docker run --rm --shm-size=1g -v "$PWD/ci:/ci:ro" \
+            --entrypoint node failsafe-security/artex:ci /ci/api-recon-smoke.js
+
       - name: Record image digest
         run: docker image inspect failsafe-security/artex:ci --format '{{.Id}}' | tee image-id.txt
 

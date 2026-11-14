@@ -84,11 +84,15 @@ RUN set -eux; \
 
 # Preinstall the api-recon skill's Node runtime from its lockfile (official
 # registry, integrity-checked, no lifecycle scripts) so the agent never has to
-# run `npm install` at runtime. NODE_PATH below makes it resolvable from any
-# working directory the agent copies the scripts into.
+# run `npm install` at runtime. runtime_harvest.js resolves it by the absolute
+# ARTEX_PUPPETEER_PATH below, so a node_modules/ in a scanned workspace cannot
+# shadow it.
 COPY skills/api-recon/scripts/package.json skills/api-recon/scripts/package-lock.json skills/api-recon/scripts/.npmrc /opt/api-recon-runtime/
+# jq guard: every resolved URL in the lockfile must be the official registry.
+# Parsing the JSON is robust to formatting (unlike a line grep). jq is installed
+# above.
 RUN cd /opt/api-recon-runtime \
-    && ! grep '"resolved"' package-lock.json | grep -qv '"https://registry\.npmjs\.org/' \
+    && jq -e '[.packages[].resolved? // empty] | all(startswith("https://registry.npmjs.org/"))' package-lock.json > /dev/null \
     && npm ci --ignore-scripts \
     && npm cache clean --force \
     && rm -rf /root/.npm
@@ -105,7 +109,8 @@ RUN chmod +x /app/artex /app/start.sh \
 # Upstream runs as root; keep that for tool parity. compose adds
 # no-new-privileges and binds the console to loopback.
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-    NODE_PATH=/usr/local/lib/node_modules:/opt/api-recon-runtime/node_modules \
+    NODE_PATH=/usr/local/lib/node_modules \
+    ARTEX_PUPPETEER_PATH=/opt/api-recon-runtime/node_modules/puppeteer-core \
     TMPDIR=/tmp \
     NORMA_RIPGREP_NO_INSTALL=1 \
     NEXT_TELEMETRY_DISABLED=1
