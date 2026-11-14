@@ -16,10 +16,12 @@ repository became unavailable. The `v0.3.15` tag was chosen because it predates
 the `v0.3.16` prebuilt image that carried the `verifyCaptcha` implant, and its
 Go sources match the tree that was audited on 2026-11-04/10.
 
-The self-update constant currently assumes the public repository will be
-`failsafe-security/artex`. If the final GitHub organization or repository name
-differs, change it in `selfupdate/github.go` and `selfupdate/github_test.go`,
-then rebuild and record the new binary hash. Do not make the update source
+Online self-update is disabled in this fork: `selfupdate.Enabled` is the
+constant `false`, so the binary never checks or downloads a remote release and
+there is no release feed to point at. `Repo` is a local, non-remote
+placeholder. To re-enable online update you must edit the source (flip
+`Enabled`, set `Repo` to a trusted feed, and update the tests), rebuild, and
+re-audit the download/verify path. Do not make the update source
 runtime-configurable: that would turn a writable setting into a code-execution
 path.
 
@@ -31,13 +33,19 @@ changes below. The web UI source is unchanged.
 
 ## What changed
 
-1. **`selfupdate/github.go`** — `const Repo` changed from `RuoJi6/ARTEX` to
-   `failsafe-security/artex`. This points the self-update release check at this
-   fork instead of upstream. The Docker build embeds a `-failsafe.N` version
-   suffix, which disables the one-click updater, so this is defense in depth.
-2. **`selfupdate/github_test.go`** — test-only updates so the expected URL,
-   error string, and fixture URLs match the new `Repo` constant. No production
-   behavior changes.
+1. **`selfupdate/github.go`** — online self-update is disabled: added the
+   `Enabled = false` constant and the `ErrDisabled` error, and `FetchLatest`
+   now returns `ErrDisabled` before any network request. `const Repo` is set to
+   a local, non-remote placeholder (it was `RuoJi6/ARTEX` upstream). Combined
+   with the `-failsafe.N` version suffix in the Docker build, the updater is
+   off at every layer.
+2. **`selfupdate/stage.go`** — `Stage` returns `ErrDisabled` before any
+   download, as defense in depth.
+3. **`server/update.go`** — `/api/update/check` reports the updater disabled
+   without an outbound request; `/api/update/apply` and `/api/update/rollback`
+   return 403.
+4. **`selfupdate/github_test.go`** — tests rewritten to assert the disabled
+   paths make no network request. No production behavior beyond the above.
 3. **Distribution files removed** — the upstream `Dockerfile`,
    `docker-compose.yml`, `docker-compose.bench.yml`, `install.sh`, `update.sh`,
    `bench/`, `.env.example`, and `.github/workflows/release.yml` were removed

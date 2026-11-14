@@ -3,6 +3,7 @@ package selfupdate
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,12 +11,30 @@ import (
 	"time"
 )
 
-// Repo 是发布源。写死而不是做成配置项：更新源可配等于给任何能改配置的人一条
-// 远程代码执行通道，对一个渗透测试平台来说这个口子开不得。
-const Repo = "failsafe-security/artex"
+// Enabled reports whether online self-update is compiled into this build.
+//
+// It is forced OFF in this fork and is a const, not a setting: no config key,
+// environment variable, or admin session can turn it back on without editing
+// and rebuilding the source. Every online entry point (FetchLatest, Stage)
+// checks it and refuses before touching the network, so this binary never
+// reaches a remote release feed. Re-enabling online update means flipping this
+// to true, re-pointing Repo at a trusted release source, and re-auditing the
+// download/verify path.
+const Enabled = false
 
-// latestURL 是 GitHub 的"最新正式版"接口。它会自动跳过 prerelease 和 draft。
-const latestURL = "https://api.github.com/repos/" + Repo + "/releases/latest"
+// ErrDisabled is returned by every online-update entry point while Enabled is
+// false.
+var ErrDisabled = errors.New("在线更新已禁用：本地构建不检查或下载远程版本")
+
+// Repo was the online release source. Because online self-update is disabled
+// (see Enabled), Repo is never used to build a real network request; it is a
+// local, non-remote placeholder shown in the update UI. latestURL is likewise
+// dead while Enabled is false.
+const Repo = "local (self-update disabled)"
+
+// latestURL would be GitHub's "latest release" endpoint. Unreachable while
+// Enabled is false — FetchLatest returns ErrDisabled before it is used.
+const latestURL = "https://api.github.com/repos/failsafe-security/artex/releases/latest"
 
 // allowedHosts 限定升级链路能访问的域名。配合下面的 checkRedirect，
 // 任何一跳被重定向到名单外的主机都会直接失败——这是防止 DNS 污染 / 中间人
@@ -85,7 +104,13 @@ func checkURL(u *url.URL) error {
 }
 
 // FetchLatest 查询最新正式版。
+//
+// Disabled in this fork: it returns ErrDisabled without making any network
+// request while Enabled is false.
 func FetchLatest(ctx context.Context, c *http.Client) (*Release, error) {
+	if !Enabled {
+		return nil, ErrDisabled
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, latestURL, nil)
 	if err != nil {
 		return nil, err
