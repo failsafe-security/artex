@@ -63,7 +63,7 @@ scope, rules of engagement, and applicable law.
 
 ## Known residual risks
 
-1. **Source provenance.** The `v0.3.15` source comes from a mirror of the
+1. **Source provenance.** The `v0.3.30` source comes from a mirror of the
    original project because the original upstream is unavailable. The build is
    reproducible from this tree, but that proves the binary matches the tree,
    not that the tree matches the original author's last release.

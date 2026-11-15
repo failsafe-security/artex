@@ -1,4 +1,4 @@
-IMAGE ?= failsafe-security/artex:v0.3.15-safe
+IMAGE ?= failsafe-security/artex:v0.3.30-safe
 COMPOSE_BIN ?= $(shell if docker compose version >/dev/null 2>&1; then echo "docker compose"; else echo "docker-compose"; fi)
 COMPOSE ?= $(COMPOSE_BIN) --env-file .env.safe -f docker-compose.safe.yml
 

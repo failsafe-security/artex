@@ -2,7 +2,7 @@
 #
 # FailSafe ARTEX full build.
 #
-# Builds ARTEX v0.3.15 from source with the upstream runtime capabilities:
+# Builds ARTEX v0.3.30 from source with the upstream runtime capabilities:
 # Node 22, Playwright MCP/CLI, Chromium, and the usual recon tools. It does not
 # pull a prebuilt ARTEX image. The runtime runs as root, as upstream does, so
 # nmap raw scans and runtime tool installation work; the compose file still
@@ -40,14 +40,20 @@ RUN CGO_ENABLED=0 go build \
       -trimpath \
       -buildvcs=false \
       -tags embedui \
-      -ldflags="-buildid= -X main.version=v0.3.15-failsafe.1" \
+      -ldflags="-buildid= -X main.version=v0.3.30-failsafe.1" \
       -o /out/artex ./cmd/artex
 
 FROM ${PYTHON_IMAGE} AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates ripgrep curl wget vim git jq unzip tzdata binutils \
       dnsutils iputils-ping netcat-openbsd inetutils-telnet whois nmap \
+      sqlmap ffuf hydra whatweb gobuster dirb masscan socat \
+      gcc g++ make python3-pip python3-venv libssl-dev perl libnet-ssleay-perl \
     && rm -rf /var/lib/apt/lists/*
+# nikto has no bookworm package; vendor it from source like upstream tooling.
+RUN git clone --depth 1 https://github.com/sullo/nikto.git /opt/nikto \
+    && ln -sf /opt/nikto/program/nikto.pl /usr/local/bin/nikto \
+    && chmod +x /opt/nikto/program/nikto.pl
 
 # Bring Node 22 in from the pinned builder stage. COPY dereferences the npm/npx
 # symlinks, so recreate them against the copied node_modules tree.
