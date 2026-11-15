@@ -26,6 +26,14 @@ func deferredSystem(sysText string, def DeferredInfo) (system []string, boundary
 	return system, boundary
 }
 
+func deferredSystemWithTail(sysText, tail string, def DeferredInfo) (system []string, boundary int) {
+	system, boundary = deferredSystem(sysText, def)
+	if tail != "" {
+		system = append(system, tail)
+	}
+	return system, boundary
+}
+
 // seedUnlockFromHistory replays prior Skill() invocations in the conversation so
 // their skill-gated MCPs are re-unlocked on a resumed session (design doc C2). The
 // main agent builds a fresh session each turn; its in-memory unlock set would

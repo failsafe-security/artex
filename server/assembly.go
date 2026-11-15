@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Autumn-27/artex/agent"
@@ -159,8 +161,8 @@ func wireAgentAugment(pg *db.DB, skillDir string, hostTools func() ([]actool.Cor
 		if hostTools != nil {
 			ht, deferredBinds := hostTools()
 			extra = append(extra, ht...)
-			for name, boundAgents := range deferredBinds {
-				if !contains(boundAgents, a.Key) {
+			for _, name := range slices.Sorted(maps.Keys(deferredBinds)) {
+				if !contains(deferredBinds[name], a.Key) {
 					continue // only defer names this agent is actually bound to
 				}
 				allNames = append(allNames, name)       // schema withheld from the prompt

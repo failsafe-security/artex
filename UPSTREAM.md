@@ -63,6 +63,12 @@ changes below. The web UI source is unchanged.
    `@latest` download, and Chromium startup failures as root. The MCP is still
    seeded disabled and remains an admin-enabled feature.
 
+8. **Prompt-prefix stability** (`agent/worker.go`, `agent/deferred.go`,
+   `server/assembly.go`) — the per-run artifact path and intent block moved to
+   the tail of the worker system prompt, and deferred tool bindings are
+   iterated in sorted order. Identical worker prefixes let a local
+   llama.cpp server reuse its prompt cache across runs.
+
 No other application logic was changed.
 
 ## The incident this fork responds to
