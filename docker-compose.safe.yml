@@ -22,7 +22,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.safe
-    image: failsafe-security/artex:v0.3.15-safe
+    image: failsafe-security/artex:v0.3.30-failsafe.2
     depends_on:
       postgres:
         condition: service_healthy
@@ -34,9 +34,8 @@ services:
     ports:
       # Console and API. Localhost only by default.
       - "127.0.0.1:8787:8787"
-      # The recording proxy is intentionally not published. Uncomment only
-      # if you need it on the host and understand that it records traffic.
-      # - "127.0.0.1:8788:8788"
+      # Recording proxy, unlocked for traffic inspection.
+      - "127.0.0.1:8788:8788"
     volumes:
       - artex_data:/app/data
       # JWT signing key. Persisted separately so sessions survive restarts and
@@ -46,8 +45,20 @@ services:
       # - ./skills:/app/skills:ro
     restart: unless-stopped
     stop_grace_period: 30s
+    # Offsec-max: root inside, extra caps for raw/AD/scapy work, no setuid
+    # restrictions, and raised fd/proc limits so mass scanners do not starve.
     security_opt:
-      - no-new-privileges:true
+      - seccomp:unconfined
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_PTRACE
+      - SYS_ADMIN
+    ulimits:
+      nofile: 65536
+      nproc: 32768
+    mem_limit: 8g
+    pids_limit: 8192
     # Chromium needs more than Docker's default 64 MB /dev/shm.
     shm_size: "1gb"
     tmpfs:

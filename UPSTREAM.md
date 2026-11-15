@@ -5,16 +5,19 @@
 | Field | Value |
 |---|---|
 | Upstream project | `RuoJi6/ARTEX` |
-| Upstream tag | `v0.3.15` |
-| Tag commit | `a91b27feb7168c1486f827559bc48a589a920012` |
-| Imported | 2026-11-10 |
+| Upstream tag | `v0.3.30` |
+| Tag commit | `6997a4661921395072290becc50380db8dacb04e` |
+| Imported | 2026-11-15 (previously `v0.3.15`, imported 2026-11-10) |
 | License | AGPL-3.0 (`LICENSE`) |
 | Original author | Autumn-27 / ARTEX contributors |
 
 `RuoJi6/ARTEX` is the best available source base after the original upstream
-repository became unavailable. The `v0.3.15` tag was chosen because it predates
-the `v0.3.16` prebuilt image that carried the `verifyCaptcha` implant, and its
-Go sources match the tree that was audited on 2026-11-04/10.
+repository became unavailable. The first import used the `v0.3.15` tag because
+it predates the `v0.3.16` prebuilt image that carried the `verifyCaptcha`
+implant; that tree was audited on 2026-11-04/10. The distribution now tracks
+`v0.3.30`. The image-only implant was never present in the GitHub source, and
+`make verify` checks the built binary for its indicators, but the full audit
+report under `audit/` still covers `v0.3.15` only.
 
 The self-update constant currently assumes the public repository will be
 `failsafe-security/artex`. If the final GitHub organization or repository name
@@ -26,7 +29,7 @@ path.
 ## What is unchanged
 
 All Go source files, `go.mod`, `go.sum`, `start.sh`, and `skills/` are
-byte-identical to the audited `v0.3.15` tree, except for the deliberate
+byte-identical to the upstream `v0.3.30` tree, except for the deliberate
 changes below. The web UI source is unchanged.
 
 ## What changed
@@ -60,6 +63,12 @@ changes below. The web UI source is unchanged.
    `@latest` download, and Chromium startup failures as root. The MCP is still
    seeded disabled and remains an admin-enabled feature.
 
+8. **Prompt-prefix stability** (`agent/worker.go`, `agent/deferred.go`,
+   `server/assembly.go`) — the per-run artifact path and intent block moved to
+   the tail of the worker system prompt, and deferred tool bindings are
+   iterated in sorted order. Identical worker prefixes let a local
+   llama.cpp server reuse its prompt cache across runs.
+
 No other application logic was changed.
 
 ## The incident this fork responds to
@@ -80,7 +89,7 @@ images used by the build are pinned by digest in `Dockerfile.safe`.
 
 See:
 
-- [`audit/artex-v0.3.15-audit.md`](audit/artex-v0.3.15-audit.md) — this tag
+- [`audit/artex-v0.3.15-audit.md`](audit/artex-v0.3.15-audit.md) — the first imported tag
 - [`SECURITY.md`](SECURITY.md) — deployment guidance and residual risk
 
 ## Update policy

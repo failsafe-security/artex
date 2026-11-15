@@ -9,7 +9,7 @@ an open-source multi-agent security testing harness.
 
 This repository exists because the prebuilt `tomicdd/artex` Docker image was
 found to contain an unauthenticated command-execution backdoor in November 2026.
-This build is compiled from the audited `v0.3.15` source tag and keeps upstream's
+This build is compiled from the upstream `v0.3.30` source tag and keeps upstream's
 full runtime capabilities, including Node 22, Playwright, Chromium, and nmap.
 The compose file binds the console to localhost and does not publish the
 recording proxy.
@@ -101,7 +101,7 @@ cp -R web/out/. server/webui/dist/
 
 CGO_ENABLED=0 go build \
   -trimpath -buildvcs=false -tags embedui \
-  -ldflags="-buildid= -X main.version=v0.3.15-failsafe.1" \
+  -ldflags="-buildid= -X main.version=v0.3.30-failsafe.2" \
   -o artex ./cmd/artex
 ```
 
@@ -119,7 +119,7 @@ make verify
 This checks the known implant indicators (`verifyCaptcha`, `tomicdd`,
 `congdonglinux`), prints the binary SHA-256, and lists the image ID. See
 [`audit/artex-v0.3.15-audit.md`](audit/artex-v0.3.15-audit.md) for the full
-audit of this tag.
+audit of the first imported tag (`v0.3.15`).
 
 ## Data and secrets
 

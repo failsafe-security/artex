@@ -16,13 +16,21 @@ import (
 // skill loads. Returns a single plain segment + boundary 0 when there is no global
 // block to add.
 func deferredSystem(sysText string, def DeferredInfo) (system []string, boundary int) {
-	sysText += def.FindingGuidance
+	sysText += def.FindingGuidance + def.CaseGuidance + def.IntelligenceGuidance
 	block := actool.RenderDeferredToolsBlock(def.GlobalNames)
 	if block == "" {
 		return []string{sysText}, 0
 	}
 	system = []string{sysText, block}
 	boundary = len(system) // b >= len → whole system prompt cached (SDK guard)
+	return system, boundary
+}
+
+func deferredSystemWithTail(sysText, tail string, def DeferredInfo) (system []string, boundary int) {
+	system, boundary = deferredSystem(sysText, def)
+	if tail != "" {
+		system = append(system, tail)
+	}
 	return system, boundary
 }
 
