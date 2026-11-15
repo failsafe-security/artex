@@ -4,6 +4,20 @@
 
 ## [Unreleased]
 
+## [0.3.30-failsafe.2] - 2026-11-15
+
+FailSafe distribution release on top of upstream 0.3.30.
+
+### Changed
+
+- Worker system prompt keeps a stable prefix across intents: the per-run artifact spec, intent block, and intent assets move to the tail segment after the deferred-tool block. A local llama.cpp server can now reuse its prompt cache between worker runs.
+- Deferred host tools are bound in sorted order, so the tool block is byte-identical across runs.
+- Image tag renamed from `v0.3.30-safe` to `v0.3.30-failsafe.2` to match the embedded version string.
+
+### Distribution
+
+- Rebased the FailSafe overlay onto upstream tag `v0.3.30` (`6997a46`). The audit report still covers `v0.3.15`.
+
 ## [0.3.30] - 2026-11-14
 
 ### 新增与改进

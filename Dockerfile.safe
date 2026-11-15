@@ -40,7 +40,7 @@ RUN CGO_ENABLED=0 go build \
       -trimpath \
       -buildvcs=false \
       -tags embedui \
-      -ldflags="-buildid= -X main.version=v0.3.30-failsafe.1" \
+      -ldflags="-buildid= -X main.version=v0.3.30-failsafe.2" \
       -o /out/artex ./cmd/artex
 
 FROM ${PYTHON_IMAGE} AS runtime

@@ -22,7 +22,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.safe
-    image: failsafe-security/artex:v0.3.30-safe
+    image: failsafe-security/artex:v0.3.30-failsafe.2
     depends_on:
       postgres:
         condition: service_healthy
