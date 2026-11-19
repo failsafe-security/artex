@@ -385,7 +385,7 @@ PLAYWRIGHT_HTML_OPEN=never npx playwright test tests/<group>/<scenario>.spec.ts:
 playwright-cli attach tw-XXXX
 ```
 
-The test is paused at the start. Step forward or run to until just before the failing action or assertion, then diagnose:
+The test is paused at the start. Step forward or run until just before the failing action or assertion, then diagnose:
 
 ```bash
 playwright-cli snapshot                # did the element change / move / rename?
