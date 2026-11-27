@@ -31,6 +31,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Autumn-27/artex/db"
+	"github.com/Autumn-27/artex/replay"
 	"github.com/Autumn-27/norma/permission"
 	actool "github.com/Autumn-27/norma/tool"
 	mproxy "github.com/lqqyt2423/go-mitmproxy/proxy"
@@ -2116,7 +2117,70 @@ func (t *Traffic) Tools() []actool.CoreTool {
 		},
 	})
 
-	return []actool.CoreTool{search, get, blob}
+	diffIdentity := actool.Build(actool.Spec{
+		Name: "diff_identity",
+		Description: "Compare two ALREADY-RECORDED exchanges for the same endpoint captured under different identities " +
+			"(baseline vs comparison) and classify the authorization outcome deterministically: shared, candidate_bola, " +
+			"enforced, session_expired, not_comparable or inconclusive. Read-only: it never sends a new request, so it " +
+			"cannot mutate target state. Use traffic_search to find both IDs. Request credentials, cookies and response " +
+			"headers are never included in the result.",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"baseline_id":   map[string]any{"type": "string", "description": "traffic ID recorded under the baseline (original) identity"},
+				"comparison_id": map[string]any{"type": "string", "description": "traffic ID recorded under the other identity"},
+				"note":          map[string]any{"type": "string", "description": "optional analyst note describing the two identities or the suspected object"},
+			},
+			"required": []any{"baseline_id", "comparison_id"},
+		},
+		ReadOnly:    ro,
+		Permissions: allow,
+		Run: func(_ context.Context, in json.RawMessage, _ *actool.ToolContext) (actool.Result, error) {
+			var a struct {
+				BaselineID   string `json:"baseline_id"`
+				ComparisonID string `json:"comparison_id"`
+				Note         string `json:"note"`
+			}
+			if err := json.Unmarshal(in, &a); err != nil {
+				return actool.Errorf(fmt.Sprintf("decode arguments: %v", err)), nil
+			}
+			a.BaselineID = strings.TrimSpace(a.BaselineID)
+			a.ComparisonID = strings.TrimSpace(a.ComparisonID)
+			if a.BaselineID == "" || a.ComparisonID == "" {
+				return actool.Errorf("baseline_id and comparison_id are required"), nil
+			}
+			if a.BaselineID == a.ComparisonID {
+				return actool.Errorf("baseline_id and comparison_id must be different exchanges"), nil
+			}
+			baselineReq, baselineResp, err := t.Get(a.BaselineID)
+			if err != nil {
+				return actool.Errorf(fmt.Sprintf("read baseline exchange: %v", err)), nil
+			}
+			comparisonReq, comparisonResp, err := t.Get(a.ComparisonID)
+			if err != nil {
+				return actool.Errorf(fmt.Sprintf("read comparison exchange: %v", err)), nil
+			}
+			baseline, err := replay.ParseRaw(a.BaselineID, baselineReq, baselineResp)
+			if err != nil {
+				return actool.Errorf(fmt.Sprintf("parse baseline exchange: %v", err)), nil
+			}
+			comparison, err := replay.ParseRaw(a.ComparisonID, comparisonReq, comparisonResp)
+			if err != nil {
+				return actool.Errorf(fmt.Sprintf("parse comparison exchange: %v", err)), nil
+			}
+			result := replay.Compare(baseline, comparison)
+			if note := strings.TrimSpace(a.Note); note != "" {
+				result.Notes = append(result.Notes, "analyst note: "+note)
+			}
+			b, err := json.Marshal(result)
+			if err != nil {
+				return actool.Errorf(fmt.Sprintf("encode result: %v", err)), nil
+			}
+			return actool.Text(string(b)), nil
+		},
+	})
+
+	return []actool.CoreTool{search, get, blob, diffIdentity}
 }
 
 // SeedToolMetas returns the traffic tools built on a ZERO receiver, for seeding the
