@@ -8,6 +8,10 @@ All notable changes to this project are documented in this file. The format is b
 
 - **Phase 1 of the out-of-band callback fabric (`oast/`)**: when `ARTEX_OAST=1`, ARTEX starts a loopback HTTP listener, mints per-task callback tokens and exposes `oast_token` / `oast_poll` to workers. Callbacks are appended to `oast_tokens` / `oast_interactions`, unknown or expired tokens are not persisted, bodies are capped at 64 KiB and the listener enforces global/per-token rate limits. DNS and SMTP listeners, external providers and automatic finding promotion remain follow-ups. See `docs/oast.md`.
 
+### Security
+
+- **Task agents can no longer widen their test scope from the shared asset store**: the asset store is shared by every task, `list_companies` returned every company in it, and `add_task_scope` accepted any existing company, domain or range, so a Planner could pull another engagement's company into its own task and start testing it. Inside a task, `list_companies` now returns only the companies the operator linked to that task (and to its directly linked tasks). `add_task_scope` never accepts a company from an agent, and accepts a domain / IP / range / ICP / keyword only when the task has a basis for it: the value is named in the task name, goal or description, or an asset recorded by this task matches it. A range added from a discovered address is capped at /24 (IPv4) or /64 (IPv6). `add_company_scope` inside a task only works on a company linked to the task, cannot create one, and filters each line by the same rule. Scope added by the operator on the task page is not restricted, and assistants working outside a task are unchanged. The three tool descriptions are refreshed once on existing databases (`tool_text_scope_guard_v1`).
+
 ### Deployment and release maintenance (application version stays at 0.3.15)
 
 - Migrated to the standalone `RuoJi6/ARTEX` repository, preserving the original commit history and branches.

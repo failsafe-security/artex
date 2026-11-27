@@ -238,6 +238,11 @@ func (t *ToolSet) insertAssets() actool.CoreTool {
 				}
 			}
 
+			// Inside a task an app can only be attributed to a company the operator linked
+			// to the task; loaded on first use. Other companies in the shared store are
+			// not this task's to write to.
+			var linkedCompanies map[int64]bool
+
 			for i, item := range a.Assets {
 				// Asset gate: block first, then allow; a rejected asset must not be inserted (skip the Upsert and its subsequent side effects).
 				domains, ips, urls := assetInterceptCandidates(item)
@@ -279,6 +284,20 @@ func (t *ToolSet) insertAssets() actool.CoreTool {
 					})
 
 				case "app":
+					if taskID > 0 && item.CompanyID != nil && *item.CompanyID > 0 {
+						if linkedCompanies == nil {
+							if linkedCompanies, err = t.as.TaskCompanyIDs(taskID); err != nil {
+								errs = append(errs, errEntry{Index: i, Error: "failed to read the task scope: " + err.Error()})
+								linkedCompanies = nil
+								continue
+							}
+						}
+						if !linkedCompanies[*item.CompanyID] {
+							errs = append(errs, errEntry{Index: i, Error: fmt.Sprintf(
+								"company_id %d is not linked to this task; an app can only be attributed to a company the operator linked to the task (see list_companies), or leave company_id out", *item.CompanyID)})
+							continue
+						}
+					}
 					id, err = t.as.UpsertApp(db.UpsertAppReq{
 						Name:        item.AppName,
 						BundleID:    item.BundleID,
@@ -381,7 +400,9 @@ func (t *ToolSet) addCompanyScope() actool.CoreTool {
 			"Company names are unique: if company does not exist it is created, otherwise it is reused (the scope is simply merged in).\n"+
 			"scope has one entry per line, recognized automatically by the system: root domain / URL / single IP / CIDR range / ICP filing / company keyword.\n"+
 			"Always give a reason stating the basis for ownership (whois/certificate/ASN, etc.).\n"+
-			"Guardrails: bare TLDs and over-wide ranges are rejected (IPv4 prefix must be /16-/32, IPv6 prefix must be /32-/128); invalid lines are skipped and returned in errors.",
+			"Guardrails: bare TLDs and over-wide ranges are rejected (IPv4 prefix must be /16-/32, IPv6 prefix must be /32-/128); invalid lines are skipped and returned in errors.\n"+
+			"Inside a task: only a company the operator linked to this task can be changed (no company is created), and each line must be something this task found "+
+			"(recorded as an asset by this task) or that the task goal/description names; other lines are rejected and returned in errors.",
 		obj(map[string]any{
 			"company": str("Company name (created if missing, reused if it exists; names are unique)"),
 			"scope":   str("Asset scope, one entry per line: domain / URL / IP / CIDR / ICP filing / company keyword"),
@@ -404,17 +425,52 @@ func (t *ToolSet) addCompanyScope() actool.CoreTool {
 			if strings.TrimSpace(a.Company) == "" {
 				return actool.Errorf("company must not be empty"), nil
 			}
+			lines := splitLines(a.Scope)
+			// In a task the agent works only on the companies the operator linked to it,
+			// and adds only what the task itself has a basis for (same rule as
+			// add_task_scope). A company's scope claims matching assets store-wide, so
+			// without this a task could pull another engagement's assets into its own.
+			var rejected []string
+			if t.taskID > 0 && t.as != nil {
+				linked, err := t.as.TaskCompanyIDs(t.taskID)
+				if err != nil {
+					return actool.Errorf("failed to read the task scope: " + err.Error()), nil
+				}
+				comp, err := t.cs.GetCompanyByName(a.Company)
+				if err != nil {
+					return actool.Errorf("failed to look up the company: " + err.Error()), nil
+				}
+				if comp == nil || !linked[comp.ID] {
+					return actool.Errorf("add_company_scope: inside a task, scope can only be added to a company the operator linked to this task (list_companies shows them); " +
+						"creating a company or changing another company's scope is not available here. Use add_task_scope for targets this task has found"), nil
+				}
+				allowed := lines[:0:0]
+				for _, line := range lines {
+					if err := t.as.CheckAgentScopeLine(t.taskID, line); err != nil {
+						rejected = append(rejected, err.Error())
+						continue
+					}
+					allowed = append(allowed, line)
+				}
+				lines = allowed
+			}
 			companyID, _, err := t.cs.UpsertCompany(a.Company, a.Logo)
 			if err != nil {
 				return actool.Errorf("failed to create/get company: " + err.Error()), nil
 			}
-			lines := splitLines(a.Scope)
-			added, skipped, invalid, errMsgs := t.cs.AddScope(companyID, lines, a.Reason)
+			added, skipped, invalid, errMsgs := 0, 0, 0, []string(nil)
+			if len(lines) > 0 {
+				added, skipped, invalid, errMsgs = t.cs.AddScope(companyID, lines, a.Reason)
+			}
+			errMsgs = append(errMsgs, rejected...)
 			out := map[string]any{
 				"company_id": companyID,
 				"added":      added,
 				"skipped":    skipped,
 				"invalid":    invalid,
+			}
+			if len(rejected) > 0 {
+				out["rejected"] = len(rejected)
 			}
 			if len(errMsgs) > 0 {
 				out["errors"] = errMsgs
@@ -426,20 +482,24 @@ func (t *ToolSet) addCompanyScope() actool.CoreTool {
 
 // addTaskScope lets the plan agent add test scope to THE CURRENT TASK — the coverage
 // denominator and the task's authorization edge. Worker discoveries are auto-scoped
-// (precise host) by insertAssets; this tool is for DELIBERATELY WIDENING: pull a whole
-// root domain or whole company into scope, or add a specific subdomain / ip.
+// (precise host) by insertAssets; this tool widens from there: a whole root domain, a
+// specific subdomain / ip / small range. Every entry must be backed by the task
+// itself (db.CheckAgentScope); a company is linked by the operator, never added here.
 func (t *ToolSet) addTaskScope() actool.CoreTool {
 	return writeTool(
 		"add_task_scope",
 		"Add test scope to THIS TASK - this is the task's authorization boundary and also the denominator of asset test coverage.\n"+
-			"Supported kind values: company (all assets under the company) / root_domain (the whole root domain, including every subdomain) / subdomain (one exact subdomain) / ip / cidr / icp / keyword.\n"+
-			"Note: hosts that workers touch one by one are added to the scope AUTOMATICALLY by the system (exact subdomain); this tool is for DELIBERATELY WIDENING it - bringing in a whole root domain / whole company, or adding a specific subdomain/IP.\n"+
-			"value: for company pass the company name or id (the company must already exist); for root_domain/subdomain pass the domain; for ip/cidr pass the IP or range; for icp/keyword pass the ICP filing number or company keyword.\n"+
+			"Supported kind values: root_domain (the whole root domain, including every subdomain) / subdomain (one exact subdomain) / ip / cidr / icp / keyword.\n"+
+			"Note: hosts that workers touch one by one are added to the scope AUTOMATICALLY by the system (exact subdomain); this tool is for DELIBERATELY WIDENING it - bringing in a whole root domain, or adding a specific subdomain/IP.\n"+
+			"Scope can only grow from what THIS TASK has a basis for: a target named in the task goal/description, or one this task has already recorded as an asset (insert_assets). "+
+			"Anything else is rejected - have a Worker confirm and record the target first. A range added from a discovered address may be at most /24 (IPv4) or /64 (IPv6).\n"+
+			"Companies cannot be added with this tool: a company is linked to the task by the operator.\n"+
+			"value: for root_domain/subdomain pass the domain; for ip/cidr pass the IP or range; for icp/keyword pass the ICP filing number or company keyword.\n"+
 			"Always give a reason stating the basis (auditable). For several entries use the entries array.",
 		obj(map[string]any{
-			"entries": map[string]any{"type": "array", "description": "Batch: [{kind, value}]. kind is one of company/root_domain/subdomain/ip/cidr/icp/keyword.", "items": map[string]any{"type": "object"}},
-			"kind":    str("[Single] company / root_domain / subdomain / ip / cidr / icp / keyword"),
-			"value":   str("[Single] company name or id / domain / IP / CIDR / ICP / keyword"),
+			"entries": map[string]any{"type": "array", "description": "Batch: [{kind, value}]. kind is one of root_domain/subdomain/ip/cidr/icp/keyword.", "items": map[string]any{"type": "object"}},
+			"kind":    str("[Single] root_domain / subdomain / ip / cidr / icp / keyword"),
+			"value":   str("[Single] domain / IP / CIDR / ICP / keyword"),
 			"reason":  str("Basis for adding it (for auditing); always fill this in"),
 		}),
 		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
@@ -589,6 +649,7 @@ func (t *ToolSet) listCompanies() actool.CoreTool {
 		"list_companies",
 		"List the COMPANIES in the asset store together with their asset scope and the number of assets attributed to them. Use it to see which companies exist and "+
 			"to get a company_id (used when insert_assets links an app, or when list_assets filters by company_id). "+
+			"Inside a task this returns only the companies the operator linked to this task (and to its directly linked tasks). "+
 			"Optionally search does a fuzzy filter on the company name (case-insensitive); leave it empty to return all.",
 		obj(map[string]any{
 			"search": str("Fuzzy filter on the company name (optional, case-insensitive); leave empty to return all"),
@@ -605,6 +666,14 @@ func (t *ToolSet) listCompanies() actool.CoreTool {
 			if err != nil {
 				return actool.Errorf("failed to query companies: " + err.Error()), nil
 			}
+			// The store is shared by every task. Inside a task the agent sees only the
+			// companies in that task's scope; other engagements stay invisible.
+			var visible map[int64]bool
+			if t.taskID > 0 && t.as != nil {
+				if visible, err = t.as.TaskCompanyIDs(t.taskID); err != nil {
+					return actool.Errorf("failed to read the task scope: " + err.Error()), nil
+				}
+			}
 			q := strings.ToLower(strings.TrimSpace(a.Search))
 			type companyOut struct {
 				ID         int64    `json:"id"`
@@ -614,6 +683,9 @@ func (t *ToolSet) listCompanies() actool.CoreTool {
 			}
 			out := make([]companyOut, 0, len(cos))
 			for _, c := range cos {
+				if visible != nil && !visible[c.ID] {
+					continue
+				}
 				if q != "" && !strings.Contains(strings.ToLower(c.Name), q) {
 					continue
 				}

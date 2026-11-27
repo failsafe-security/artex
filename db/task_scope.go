@@ -141,6 +141,12 @@ func (s *AssetStore) AddAutoScope(taskID int64, assetType, domain, rawURL, ip st
 
 // AddAgentScope parses a (kind,value) pair and records it as task scope.
 // source is "agent" when called from an LLM tool, "manual" from the UI.
+//
+// An agent write is guarded (see CheckAgentScope): the entry must have been named by
+// the operator in the task itself or found by this task, and a company can never be
+// added by an agent. The asset store is shared across tasks, so an unguarded agent
+// could otherwise put another engagement's company into its own test scope. Manual
+// writes are the operator's decision and are not restricted.
 // company: value = company name or id (must already exist). root_domain/subdomain:
 // value = a domain. ip/cidr: value = an IP or CIDR (bare IP → /32,/128).
 func (s *AssetStore) AddAgentScope(taskID int64, kind, value, reason, source string) (TaskScope, error) {
@@ -169,6 +175,18 @@ func (s *AssetStore) AddAgentScope(taskID int64, kind, value, reason, source str
 		}
 		if err != nil {
 			return ts, err
+		}
+		if source == "agent" {
+			// Same answer whether or not the company exists, so the tool cannot be
+			// used to probe which companies are in the shared store.
+			linked, lerr := s.TaskCompanyIDs(taskID)
+			if lerr != nil {
+				return ts, lerr
+			}
+			if comp == nil || !linked[comp.ID] {
+				return ts, fmt.Errorf("%w: an agent cannot add a company to the task scope; companies are linked by the operator on the task page. "+
+					"Add the specific domains or addresses this task has found instead", ErrScopeNotDiscovered)
+			}
 		}
 		if comp == nil {
 			return ts, fmt.Errorf("company not found: %s (confirm with list_companies first, or create the company)", value)
@@ -213,6 +231,11 @@ func (s *AssetStore) AddAgentScope(taskID int64, kind, value, reason, source str
 		ts.Value = parsed.Value
 	default:
 		return ts, fmt.Errorf("unsupported kind: %s (company/root_domain/subdomain/ip/cidr/icp/keyword)", kind)
+	}
+	if source == "agent" && ts.Kind != "company" {
+		if err := s.CheckAgentScope(taskID, ts.Kind, ts.Domain, ts.Net, ts.Value); err != nil {
+			return ts, err
+		}
 	}
 	if err := s.upsertTaskScope(ts); err != nil {
 		return ts, err

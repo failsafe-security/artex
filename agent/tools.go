@@ -529,7 +529,7 @@ func (t *ToolSet) graphOverviewData() map[string]any {
 					m["denominator"] = cov.Denominator
 					m["tested"] = cov.Tested
 					m["by_type"] = cov.ByType
-					m["note"] = "coverage = asset test coverage (covering all related assets such as endpoints); a rough estimate, for reference only: it includes the scope and fact anchors of the current task and of directly linked tasks; linked scope is read-only. Container-type assets / heavy enumeration make it read low, so do not conclude from it that testing is finished; use add_task_scope to extend this task's scope and list_untested_assets to see untested assets [normally do not call list_untested_assets; just keep advancing the task];"
+					m["note"] = "coverage = asset test coverage (covering all related assets such as endpoints); a rough estimate, for reference only: it includes the scope and fact anchors of the current task and of directly linked tasks; linked scope is read-only. Container-type assets / heavy enumeration make it read low, so do not conclude from it that testing is finished; add_task_scope can add targets this task has discovered to its scope, and list_untested_assets shows untested assets [normally do not call list_untested_assets; just keep advancing the task];"
 					if cov.Denominator == 0 {
 						m["pct"] = nil
 						m["status"] = "scope not anchored"
@@ -2046,7 +2046,7 @@ func (t *ToolSet) PlannerTools() []actool.CoreTool {
 		t.listAssets(),
 		// add_company_scope: when planning, a domain/IP/CIDR/ICP/keyword can be added to a company's asset scope (matching assets are claimed automatically).
 		t.addCompanyScope(),
-		// add_task_scope: proactively add a whole root domain / whole company / a subdomain / an IP to this task's test scope (the coverage denominator).
+		// add_task_scope: add a root domain / subdomain / IP this task has discovered to its test scope (the coverage denominator).
 		t.addTaskScope(),
 		// list_untested_assets: look up untested assets within this task's scope on demand (type + pagination) and decide independently whether to test them.
 		t.listUntestedAssets(),
