@@ -1,0 +1,29 @@
+# Files that may contain Chinese because the text is functional, not product copy.
+# Enforced by internal/englishguard (TestRepositorySourceIsEnglish), which runs
+# with the normal Go test suite. Keep this list small and explain every entry.
+#
+# Legacy markers written by older builds and still read back (#19 keeps reading
+# them for existing databases and old drafts).
+agent/provider.go                        # DeepSeek quota substrings are matched against provider responses
+db/english_defaults.go                   # "[内置]" legacy prefix and the Han-character regex itself
+db/intercept.go                          # legacy "[模型]" approval-reason prefix in SQL
+db/task_archives_restore.go              # legacy "[模型]" approval-reason prefix in SQL
+intercept/intercept.go                   # legacy "[模型]" approval-reason prefix
+server/conversations.go                  # legacy default title "新对话" for conversations stored by old builds
+server/english_defaults.go               # legacy Chinese reporter trigger text, compared byte-for-byte
+server/finding_workflow.go               # legacy Chinese traffic_search description, used to detect old rows
+server/logsink.go                        # Chinese log keywords still emitted by legacy components
+server/orchestration.go                  # legacy v1 reporter trigger text, compared byte-for-byte
+web/src/components/approval-records.tsx  # legacy "[模型]" prefix
+web/src/components/transcript.tsx        # legacy Chinese approval-summary regex
+web/src/lib/mock/handler.ts              # legacy "[模型]" prefix in the mock backend
+#
+# Backwards-compatible input aliases and detection of Chinese target content.
+db/company_scope.go                      # ICP filing detection ("备案")
+server/chat_mentions.go                  # legacy Chinese mention aliases ("漏洞#12" etc.)
+server/server.go                         # legacy Chinese intent/hint input aliases ("意图:" / "提示:")
+web/src/lib/chat-mentions.ts             # legacy Chinese mention tokens in saved drafts
+web/src/lib/company-scope.ts             # ICP detection ("备案")
+#
+# Deliberate matcher for Chinese target sites, not product copy.
+skills/api-recon/scripts/preload.js      # matches Chinese login/unauthenticated copy on target sites
