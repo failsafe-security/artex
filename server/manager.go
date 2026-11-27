@@ -19,6 +19,7 @@ import (
 	"github.com/Autumn-27/artex/enrich"
 	"github.com/Autumn-27/artex/guard"
 	"github.com/Autumn-27/artex/intercept"
+	"github.com/Autumn-27/artex/oast"
 	"github.com/Autumn-27/artex/traffic"
 	actool "github.com/Autumn-27/norma/tool"
 )
@@ -220,6 +221,7 @@ type Manager struct {
 	pg          *pgdb.DB
 	assets      *pgdb.AssetStore
 	traffic     *traffic.Traffic       // process-wide recording proxy (may be nil)
+	oast        *oast.OAST             // out-of-band callback listener (nil unless ARTEX_OAST=1)
 	enrich      *enrich.Engine         // engine-side asset auto-completion (DNS/HTTP)
 	interceptor *intercept.Interceptor // user-configured tool-call interception rules
 
@@ -440,6 +442,18 @@ func NewManager(dir, proxyAddr string) (*Manager, error) {
 	if m.traffic != nil {
 		if err := m.traffic.SetUpstreamProxy(m.globalProxy); err != nil {
 			log.Printf("[proxy] global proxy %q is invalid, ignored: %v", m.globalProxy, err)
+		}
+	}
+	// Out-of-band callback listener (default off; ARTEX_OAST=1). It binds only to
+	// loopback; operators expose it through a tunnel. A failure disables the
+	// feature without taking the server down, matching the traffic recorder.
+	if cfg, on := oast.FromEnv(); on {
+		o, err := oast.Open(pg, cfg)
+		if err != nil {
+			log.Printf("[oast] disabled: %v", err)
+		} else {
+			m.oast = o
+			log.Printf("[oast] HTTP callback listener on %s (public URL: %s)", o.Addr(), o.PublicURL())
 		}
 	}
 	m.enrich = enrich.New(m.assets, m.ProxyAddr, 4)
@@ -730,10 +744,14 @@ func encodeJSON(v any) json.RawMessage {
 // traffic tools, gated by the global capture switch: empty when capture is off, so
 // no agent gets traffic_search/traffic_get regardless of binding.
 func (m *Manager) HostTools() []actool.CoreTool {
-	if m.traffic == nil || !m.TrafficEnabled() {
-		return nil
+	var tools []actool.CoreTool
+	if m.traffic != nil && m.TrafficEnabled() {
+		tools = append(tools, m.traffic.Tools()...)
 	}
-	return m.traffic.Tools()
+	if m.oast != nil {
+		tools = append(tools, m.oast.Tools()...)
+	}
+	return tools
 }
 
 func (m *Manager) Assets() *pgdb.AssetStore  { return m.assets }
@@ -808,6 +826,9 @@ func (m *Manager) Close() error {
 	defer m.mu.Unlock()
 	if m.traffic != nil {
 		m.traffic.Close()
+	}
+	if m.oast != nil {
+		_ = m.oast.Close()
 	}
 	return m.pg.Close()
 }

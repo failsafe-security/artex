@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- **Phase 1 of the out-of-band callback fabric (`oast/`)**: when `ARTEX_OAST=1`, ARTEX starts a loopback HTTP listener, mints per-task callback tokens and exposes `oast_token` / `oast_poll` to workers. Callbacks are appended to `oast_tokens` / `oast_interactions`, unknown or expired tokens are not persisted, bodies are capped at 64 KiB and the listener enforces global/per-token rate limits. DNS and SMTP listeners, external providers and automatic finding promotion remain follow-ups. See `docs/oast.md`.
+
 ### Deployment and release maintenance (application version stays at 0.3.15)
 
 - Migrated to the standalone `RuoJi6/ARTEX` repository, preserving the original commit history and branches.

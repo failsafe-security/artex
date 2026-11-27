@@ -12,6 +12,7 @@ import (
 
 	"github.com/Autumn-27/artex/agent"
 	"github.com/Autumn-27/artex/db"
+	"github.com/Autumn-27/artex/oast"
 	"github.com/Autumn-27/artex/traffic"
 	"github.com/Autumn-27/norma/skill"
 	actool "github.com/Autumn-27/norma/tool"
@@ -231,6 +232,15 @@ func wireTools(pg *db.DB, domainReg map[string]actool.CoreTool) {
 	for _, t := range traffic.SeedToolMetas() {
 		schema, _ := json.Marshal(t.InputSchema())
 		if err := pg.SeedTool(t.Name(), t.Description(), schema, trafficAgents); err != nil {
+			log.Printf("[tools] seed %s failed: %v", t.Name(), err)
+		}
+	}
+	// Seed the OAST host tools with the same default worker binding. Runtime
+	// availability is gated by whether the listener started (ARTEX_OAST=1).
+	oastAgents, _ := json.Marshal([]string{"worker"})
+	for _, t := range oast.SeedToolMetas() {
+		schema, _ := json.Marshal(t.InputSchema())
+		if err := pg.SeedTool(t.Name(), t.Description(), schema, oastAgents); err != nil {
 			log.Printf("[tools] seed %s failed: %v", t.Name(), err)
 		}
 	}
